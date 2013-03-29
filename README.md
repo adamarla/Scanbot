@@ -1,4 +1,8 @@
-winbot_1.0
-==========
+Scanbot .NET Application written in C#
+==========================================================
 
-No touch version of .NET C# winbot
+Features
+- Detects and Transmits scanned worksheets 
+- Runs as an application in the System tray
+- Creates an entry in the Start Menu
+- Creates desktop Folder and icon 

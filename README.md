@@ -1,5 +1,5 @@
 Scanbot .NET Application written in C#
-==========================================================
+=======================================
 
 Features
 - Detects and Transmits scanned worksheets 

@@ -13,13 +13,10 @@ namespace gutenberg.collect
 {
     
     public class ScanbotContext : ApplicationContext
-    {
-        public const string ICON_FILE = @"scanbotgreyicon.ico";       
-        
+    {        
         public ScanbotContext(string version)
         {
             scanDir = new ScanDirectory();
-            manifest = new Manifest(scanDir);
             reporter = new Reporter(scanDir);
             
             InitializeContext(version);
@@ -37,12 +34,6 @@ namespace gutenberg.collect
 		
 		private void notifyIcon_MouseUp(object sender, MouseEventArgs e) 
 		{
-            int unresolved = scanDir.GetFiles(Scan.MANUAL_PROCESS).Length;
-			tsmiPreview.Text = string.Format(UNRESOLVED_SCANS, unresolved);
-            if (unresolved > 0) 
-                tsmiPreview.Font = new Font(tsmiPreview.Font, FontStyle.Bold);
-            else    
-                tsmiPreview.Font = new Font(tsmiPreview.Font, FontStyle.Regular);
             MethodInfo mi = typeof(NotifyIcon).GetMethod("ShowContextMenu",
                 BindingFlags.Instance | BindingFlags.NonPublic);
             mi.Invoke(notifyIcon, null);
@@ -50,31 +41,8 @@ namespace gutenberg.collect
         
 		private void displayHelpItem_Click(object sender, EventArgs e) 
 		{
-            notifyIcon.BalloonTipTitle = WELCOME_MSG_TITLE;
-            notifyIcon.BalloonTipText = 
-                string.Format(WELCOME_MSG, ScanDirectory.SCAN_DIR);
-            notifyIcon.ShowBalloonTip(5000);
-            balloonTipId = BALLOON_TIP_HELP;
 		}
 			
-		private void showPreviewItem_Click(object sender, EventArgs e) 
-		{
-            if (frmPreview == null) PrepareFormPreview();
-        
-            if (frmPreview.Visible)
-            {
-                frmPreview.BringToFront();
-            }
-            else
-            {
-                if (scanAgentManual == null)
-                    scanAgentManual = new Manual(scanDir, manifest);                
-                RefreshFromManifest(scanAgentManual.Initialize());            
-                SetPreviewImage(scanAgentManual.GetNextImage());
-                frmPreview.Show();
-            }
-		}
-        
   		private void headerItem_Click(object sender, EventArgs e)
 		{
             System.Diagnostics.Process.
@@ -83,11 +51,6 @@ namespace gutenberg.collect
         
 		private void exitItem_Click(object sender, EventArgs e)
 		{
-		    if (frmPreview != null) 
-			{
-		      frmPreview.Close();
-		    }
-
             detectionStopped = true;
             if (bwDetect != null)
             {
@@ -126,13 +89,12 @@ namespace gutenberg.collect
             {
                 countdown = 60;
                 timer.Stop();
-                tsmiPreview.Enabled = false;
-                if (scanAgentAuto == null)
-                    scanAgentAuto = new Automatic(scanDir, manifest);
+                if (detector == null)
+                    detector = new Detector(scanDir);
                 bwDetect = new BackgroundWorker();
                 bwDetect.WorkerReportsProgress = true;
                 bwDetect.WorkerSupportsCancellation = true;
-                bwDetect.DoWork += new DoWorkEventHandler(scanAgentAuto.Execute);
+                bwDetect.DoWork += new DoWorkEventHandler(detector.Execute);
                 bwDetect.RunWorkerCompleted +=
                     new RunWorkerCompletedEventHandler(DetectionCompleted);
                 bwDetect.ProgressChanged += 
@@ -145,54 +107,12 @@ namespace gutenberg.collect
             }
         }
 		        
-		private void BtnFlip_Click(Object o, EventArgs args)
-		{
-			currentImage.RotateFlip(RotateFlipType.Rotate180FlipNone);
-			SetPreviewImage(currentImage);
-		}
-		
-		private void BtnDelete_Click(Object o, EventArgs args)
-		{
-			scanAgentManual.Delete();
-		    if (!SetPreviewImage(scanAgentManual.GetNextImage()))
-			{
-				frmPreview.Close();
-				InitiateSend();
-			}
-		}
-                
-        private void lvManifestEventHandler(object sender, EventArgs e)
-        {
-            ListViewItem lvi = lvManifest.FocusedItem;
-            ListViewItem.ListViewSubItem lvsi = lvi.SubItems[1];
-            if (!lvsi.Font.Strikeout)
-            {
-                lvi.UseItemStyleForSubItems = false;
-                lvsi.Font = new Font(lvi.Font, FontStyle.Strikeout);
-                lvsi.BackColor = lvi.BackColor;
-
-                scanAgentManual.Execute(lvManifest.FocusedItem.Index, flipped);
-                if (!SetPreviewImage(scanAgentManual.GetNextImage()))
-                {
-                    frmPreview.Close();
-                    InitiateSend();
-                }
-            }
-            btnFlip.Focus();//for button short cut to work
-        }
-        
         private void balloonTip_Clicked(object sender, EventArgs e)
         {
-            switch(balloonTipId) 
+            switch(balloonTipId)
             {
-                case BALLOON_TIP_DETECTION_COMPLETED:
-                    tsmiPreview.PerformClick();
-                    break;
-                case BALLOON_TIP_TRANSMISSION_COMPLETED:
-                    break;
                 case BALLOON_TIP_HELP:
-                    System.Diagnostics.Process.
-                        Start(@"explorer.exe", @"/select," + scanDir);
+                    tsmiHeader.PerformClick();
                     break;
                 case BALLOON_TIP_SCANBOT_OFFLINE:
                     countdown = 0;
@@ -255,13 +175,13 @@ namespace gutenberg.collect
                         transmissionStartTime));
             }
         }
-public bool detectionStopped = false, transmissionStopped = false;
+        
         private void DetectionCompleted(Object o,
             RunWorkerCompletedEventArgs args)
         {
             if (args.Error != null)
             {
-                GoOffline(args.Error.ToString());
+                reporter.Log(args.Error.ToString(), ReportType.Error);
             }
             else if (args.Cancelled)
             {
@@ -270,31 +190,6 @@ public bool detectionStopped = false, transmissionStopped = false;
             }
             else 
             {
-                tsmiHeader.Text = "Scanbot";
-                int unresolved = scanDir.GetFiles(Scan.MANUAL_PROCESS).Length;
-                tsmiPreview.Text = string.Format(UNRESOLVED_SCANS, unresolved);
-                if (unresolved > 0)
-                {
-                    tsmiPreview.Font = new Font(tsmiPreview.Font, FontStyle.Bold);
-                    notifyIcon.BalloonTipTitle = 
-                        string.Format(UNRESOLVED_SCANS, unresolved);
-                    notifyIcon.BalloonTipText = 
-                        "Please resolve manually (click to view)";
-                    notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
-                    balloonTipId = BALLOON_TIP_DETECTION_COMPLETED;
-                    notifyIcon.ShowBalloonTip(30000);
-                }
-                // else
-                // {
-                    // tsmiPreview.Font = new Font(tsmiPreview.Font, FontStyle.Regular);
-                    // notifyIcon.BalloonTipTitle = WELCOME_MSG_TITLE;
-                    // notifyIcon.BalloonTipText = 
-                        // string.Format(WELCOME_MSG, ScanDirectory.SCAN_DIR);
-                    // notifyIcon.BalloonTipIcon = ToolTipIcon.Info;    
-                    // balloonTipId = BALLOON_TIP_HELP;
-                    // notifyIcon.ShowBalloonTip(5000);
-                // }
-                tsmiPreview.Enabled = true;
                 InitiateSend();
             }
             timer.Start();
@@ -306,25 +201,24 @@ public bool detectionStopped = false, transmissionStopped = false;
             sender.Asleep = true;
             if (args.Error != null)
             {
-                GoOffline(args.Error.ToString());
+                reporter.Log(args.Error.ToString(), ReportType.Error);
+                ScanbotIsInactive();
             }
             else if (args.Cancelled)
             {
                 if (detectionStopped) ExitThread(); 
                 else transmissionStopped = true;
             }
-            
+            else if (balloonTipId == BALLOON_TIP_SCANBOT_OFFLINE)
+            {
+                ScanbotIsActive();
+                reporter.Dispatch();
+            }
         }
         
-        private void OnPreviewClose(Object o, FormClosedEventArgs args)
-        {
-			frmPreview = null;
-            InitiateSend();            
-        }
-
         private void InitiateSend()
         {   
-            if (scanDir.GetFiles(Scan.DONT_PROCESS).Length == 0) return;
+            if (scanDir.GetFiles(Scan.TO_SEND).Length == 0) return;
             
             if (sender == null)
             {
@@ -345,76 +239,23 @@ public bool detectionStopped = false, transmissionStopped = false;
                 sender.Asleep = false;
             }
         }
-
-		private void RefreshFromManifest(object[] remainingItems)
-		{
-            lvManifest.Items.Clear();
-            foreach (object o in remainingItems)
-            {
-                DisplayItem di = (DisplayItem)o;
-                ListViewItem lvi = lvManifest.Items.Add(di.DisplayPageNumber);
-                lvi.SubItems.Add(di.DisplayName);
-                if (di.CompleteSet)
-                {
-                    lvi.BackColor = Color.DarkGray;
-                }
-            }
-		}		
-		
-        private bool SetPreviewImage(Image image)
-        {
-            if (image == null) return false;
         
-            this.flipped = (image == this.currentImage)? true:false;
-            this.currentImage = image;        
-            //first resize
-            int w = pnlPBox.Width, h = (int)(w*((double)image.Height/image.Width));
-            Image newImage = new Bitmap(w, h);
-            using (Graphics gr = Graphics.FromImage(newImage))
-            {               
-                gr.SmoothingMode = SmoothingMode.HighQuality;
-                gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                gr.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                gr.DrawImage(image, new Rectangle(0, 0, w, h));
-            }
-             
-            //then crop (top and bottom sections)
-            Bitmap bmp = new Bitmap(newImage);
-            Bitmap top = null, bottom = null;
-            h = pnlPBox.Height;
-            Rectangle rtop = new Rectangle(new Point(0, 0), 
-                new Size(w, h/2));
-            top = bmp.Clone(rtop, bmp.PixelFormat);         
-            Rectangle rbottom = new Rectangle(new Point(0, bmp.Height - h/2),
-                new Size(w, h/2));
-            bottom = bmp.Clone(rbottom, bmp.PixelFormat);
-            
-			int padding = 5;
-            Image composite = new Bitmap(w, h);
-            using (Graphics gr = Graphics.FromImage(composite))
-            {
-                gr.DrawImage(top, new Rectangle(0, 0, w, h/2));
-                gr.DrawImage(bottom, new Rectangle(0, h/2 + (padding), w, h/2));
-                string remaining = string.Format("{0:d2}", 
-                    scanDir.GetFiles(Scan.MANUAL_PROCESS).Length);
-                gr.DrawString(remaining, BIG_ORNG,
-                    Brushes.DarkOrange, new PointF(5, 5));
-            }
-            pbPreview.Image = composite;
-            return true;
+        private void ScanbotIsActive()
+        {
+            notifyIcon.BalloonTipTitle = WELCOME_MSG_TITLE;
+            notifyIcon.BalloonTipText = 
+                string.Format(WELCOME_MSG, ScanDirectory.SCAN_DIR);
+            notifyIcon.ShowBalloonTip(5000);
+            balloonTipId = BALLOON_TIP_HELP;
         }
         
-        private void GoOffline(string error)
+        private void ScanbotIsInactive()
         {
-            reporter.Log(error, ReportType.Error);
             tsmiHeader.Text = "Scanbot (offline)";
-            tsmiDetectionStatus.Text = 
-                string.Format(INACTIVE_STATUS_MSG, "connect");
             tsmiTransmissionStatus.Text = 
-                string.Format(INACTIVE_STATUS_MSG, "connect");
-            notifyIcon.BalloonTipTitle = "Scanbot is offline";
-            notifyIcon.BalloonTipText = 
-                "Will attempt to reconnect in 20 seconds... (try now)";
+                String.Format(INACTIVE_STATUS_MSG, "connect");
+            notifyIcon.BalloonTipTitle = INACTIVE_MSG_TITLE;
+            notifyIcon.BalloonTipText = INACTIVE_MSG;                
             notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
             balloonTipId = BALLOON_TIP_SCANBOT_OFFLINE;
             notifyIcon.ShowBalloonTip(5000);
@@ -472,13 +313,6 @@ public bool detectionStopped = false, transmissionStopped = false;
 			items.Add(tsmiTransmissionStatus);
 			items.Add(new ToolStripSeparator());
             
-			tsmiPreview = new ToolStripMenuItem(
-                string.Format(UNRESOLVED_SCANS, 0));
-			tsmiPreview.Click += showPreviewItem_Click;
-			tsmiPreview.ToolTipText = "Preview unresolved Scans";
-			items.Add(tsmiPreview);
-			items.Add(new ToolStripSeparator());
-            
             ToolStripMenuItem tsmiLaunchGradians = new 
                 ToolStripMenuItem("Launch Gradians Website");
             tsmiLaunchGradians.Click += launchGradiansItem_Click;
@@ -496,98 +330,19 @@ public bool detectionStopped = false, transmissionStopped = false;
 			items.Add(tsmiExit);
 			notifyIcon.ContextMenuStrip = menuStrip;
             
-            notifyIcon.Visible = true;            
+            notifyIcon.Visible = true;
+            ScanbotIsActive();            
 		}
-
-        private void PrepareFormPreview()
-        {
-            frmPreview = new Form();
-            frmPreview.SuspendLayout();
-			
-			int widthPreview = 750, btnWidth = 120, btnHeight = 30,
-			    padding = 5, heightPreview = 500, heightFrameBar = 30;
-
-            frmPreview.MinimumSize = 
-                new Size(widthPreview + 2*btnWidth + 2*padding, 
-				heightPreview + heightFrameBar + 2*padding);
-            frmPreview.FormBorderStyle = FormBorderStyle.FixedDialog;
-            frmPreview.BackColor = System.Drawing.SystemColors.ControlDarkDark;
-            frmPreview.MaximizeBox = false;
-            frmPreview.Icon = new Icon(ICON_FILE);
-            frmPreview.StartPosition = FormStartPosition.CenterScreen;
-            frmPreview.Text = "Scanbot - Resolution Panel";
-            frmPreview.FormClosed += new FormClosedEventHandler(OnPreviewClose);
-            
-            Size btnSize = new Size(btnWidth, btnHeight);
-
-            Panel pnlLeft = new Panel();
-            pnlLeft.Size = new Size(2*btnWidth, heightPreview);
-            pnlLeft.Location = new Point(padding, padding);
-            frmPreview.Controls.Add(pnlLeft);
-
-            btnDelete = new Button();
-            btnDelete.Size = btnSize;
-            btnDelete.Font = DEFAULT_FONT_9;
-            btnDelete.FlatStyle = FlatStyle.Flat;
-            btnDelete.ForeColor = Color.White;
-            btnDelete.Location = new Point(0, 0);
-            btnDelete.Text = "&Delete";
-            btnDelete.Click += new EventHandler(BtnDelete_Click);
-            pnlLeft.Controls.Add(btnDelete);
-
-            btnFlip = new Button();
-            btnFlip.Size = btnSize;
-            btnFlip.Font = DEFAULT_FONT_9;
-            btnFlip.ForeColor = Color.White;
-            btnFlip.FlatStyle = FlatStyle.Flat;
-            btnFlip.Location = new Point(btnSize.Width, 0);
-            btnFlip.Text = "&Flip";
-            btnFlip.Click += new EventHandler(BtnFlip_Click);
-            pnlLeft.Controls.Add(btnFlip);
-
-            lvManifest = new ListView();
-            lvManifest.View = View.Details;
-            lvManifest.Columns.Add("Pg", 30, HorizontalAlignment.Center);
-            lvManifest.Columns.Add("Student Name", 2*btnSize.Width-50,
-                HorizontalAlignment.Left);
-            lvManifest.Size = new Size(2*btnSize.Width, 
-                pnlLeft.Size.Height-btnSize.Height);
-            lvManifest.BorderStyle = BorderStyle.FixedSingle;
-            lvManifest.Location = new Point(0, btnSize.Height+padding);
-            lvManifest.Font = DEFAULT_FONT_10;
-            lvManifest.TabStop = false;
-            lvManifest.Enabled = true;
-            lvManifest.GridLines = true;
-            lvManifest.FullRowSelect = true;
-            lvManifest.Click += new EventHandler(lvManifestEventHandler);
-            pnlLeft.Controls.Add(lvManifest);
-			
-            // holds the Image
-            pnlPBox = new Panel();
-            pnlPBox.MinimumSize = new Size(widthPreview, heightPreview);
-            pnlPBox.BorderStyle = BorderStyle.FixedSingle;
-            pnlPBox.Location = new Point(2*btnWidth + 2*padding,
-                padding);
-            pnlPBox.AutoSize = false;
-            frmPreview.Controls.Add(pnlPBox);
-
-            pbPreview = new PictureBox();
-            pbPreview.SizeMode = PictureBoxSizeMode.AutoSize;
-            pnlPBox.Controls.Add(pbPreview);
-
-            frmPreview.ResumeLayout();
-        }
+        
                
         //Non-widgets
         private int countdown, balloonTipId;
-        private bool flipped;
+        private bool detectionStopped = false, 
+            transmissionStopped = false;
         private ScanDirectory scanDir;
-        private Image currentImage;
-        private Manifest manifest;
-        private Manual scanAgentManual;
-        private Automatic scanAgentAuto;
-        private BackgroundWorker bwDetect, bwTransmit;
+        private Detector detector;
         private Sender sender;
+        private BackgroundWorker bwDetect, bwTransmit;
         private Reporter reporter;
         private System.Timers.Timer timer;
         private DateTime detectionStartTime,
@@ -597,27 +352,26 @@ public bool detectionStopped = false, transmissionStopped = false;
 		private System.ComponentModel.IContainer components;
 		private NotifyIcon notifyIcon;
 		private ToolStripMenuItem tsmiHeader, tsmiDetectionStatus, 
-            tsmiTransmissionStatus, tsmiPreview, tsmiHelp;
-        private PictureBox pbPreview;
-        private ListView lvManifest;
-        private Panel pnlPBox;
-		private Button btnFlip, btnDelete;
-        private Form frmPreview;
+            tsmiTransmissionStatus, tsmiHelp;
         
         private readonly Font DEFAULT_FONT_9 = 
             new Font("Trebuchet MS", 9, FontStyle.Regular);
         private readonly Font DEFAULT_FONT_10 = 
             new Font("Trebuchet MS", 10, FontStyle.Regular);
-        private readonly Font BIG_ORNG = 
-            new Font("Trebuchet MS", 48, FontStyle.Regular);
             
-        private const string ZERO_ZERO_ZERO = "00:00:00";
-        private const string WELCOME_MSG_TITLE = "Scanbot is active";
-        private const string WELCOME_MSG = 
-            "Drop scanned worksheets into Scantray on your Desktop (click to view)";
-        private const string ACTIVE_STATUS_MSG = "{0} {1}% ({2}) ";
-        private const string INACTIVE_STATUS_MSG = "Waiting to {0}...";
-        private const string UNRESOLVED_SCANS = "Unresolved Scans ({0})";
+        private const string 
+            ZERO_ZERO_ZERO = "00:00:00",
+            WELCOME_MSG_TITLE = "Scanbot is active",
+            INACTIVE_MSG_TITLE = "Scanbot is Offline",
+            WELCOME_MSG = 
+                "Drop scanned worksheets into Scantray on " +
+                "your Desktop (click to view)",
+            INACTIVE_MSG =
+                "Will attempt to reconnect in 20 seconds... (try now)",
+            ACTIVE_STATUS_MSG = "{0} {1}% ({2}) ",
+            INACTIVE_STATUS_MSG = "Waiting to {0}...",
+            UNRESOLVED_SCANS = "Unresolved Scans ({0})",
+            ICON_FILE = @"scanbotgreyicon.ico";       
         private const int 
             BALLOON_TIP_DETECTION_COMPLETED = 1,
             BALLOON_TIP_TRANSMISSION_COMPLETED = 2,

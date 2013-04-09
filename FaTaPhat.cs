@@ -93,7 +93,7 @@ namespace gutenberg.collect
         private static NameValueCollection GetServerProps()
         {
             string configFile = Path.Combine(System.Environment.GetFolderPath
-                (Environment.SpecialFolder.Personal), ".scanLoader");
+                (Environment.SpecialFolder.Personal), ".scanbot");
             configFile = Path.Combine(configFile, "config.xml");
             bool runLocal = File.Exists(configFile);
             /**
@@ -113,12 +113,11 @@ namespace gutenberg.collect
             else
             {
                 /**
-                     ****************************************************
-                     ** configuration file has your password, at least it's in a
-                     ** hidden folder in YOUR $HOME.
-                     ****************************************************
-					 
-                    */
+                 ****************************************************
+                 ** configuration file has your password, at least it
+                 ** is in a hidden folder in YOUR $HOME.
+                 ****************************************************
+                 */
                 XmlDocument config = new XmlDocument();
                 config.LoadXml(File.ReadAllText(configFile));
                 XmlNodeList elements = config.GetElementsByTagName("entry");

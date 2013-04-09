@@ -47,16 +47,13 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Automatic.cs" />
+    <Compile Include="Detector.cs" />
     <Compile Include="Driver.cs" />
     <Compile Include="FaTaPhat.cs" />
     <Compile Include="ScanbotContext.cs" />
-    <Compile Include="Manifest.cs" />
-    <Compile Include="Manual.cs" />
     <Compile Include="Scan.cs" />
     <Compile Include="ScanDirectory.cs" />
     <Compile Include="Sender.cs" />
-    <Compile Include="Splash.cs" />
     <Compile Include="Reporter.cs" />
   </ItemGroup>
   <ProjectExtensions>

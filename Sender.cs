@@ -16,12 +16,11 @@ namespace gutenberg.collect
         {
             asleep = false;
             Scan scan = null;
-            string[] scanFiles = scanDir.GetFiles(Scan.DONT_PROCESS);
+            string[] scanFiles = scanDir.GetFiles(Scan.TO_SEND);
             FaTaPhat fataphat = new FaTaPhat();
             fataphat.Connect();
             while (scanFiles.Length != 0)
             {
-                char[] sep = {'_'};
                 int fileCount = 0;
                 int progress = (int)(fileCount * 100.00 / scanFiles.Length);
 				((BackgroundWorker)o).ReportProgress(progress, "TASK_START");
@@ -32,16 +31,12 @@ namespace gutenberg.collect
                         args.Cancel = true;
                         break;
                     }
-                    
+
                     fileCount++;
                     progress = (int)(fileCount * 100.00 / scanFiles.Length);
                     ((BackgroundWorker)o).ReportProgress(progress);
                  
-                    string fileName = Path.GetFileName(scanFile);
-                    string[] tokens = fileName.Substring(0, 
-                     fileName.IndexOf(Scan.DONT_PROCESS)).Split(sep);
-                    scan = new Scan(tokens[0], tokens[1], 
-                     int.Parse(tokens[2]), scanFile);
+                    scan = new Scan(scanFile);
                     scan.Process(fataphat);
                 }
                 
@@ -50,8 +45,9 @@ namespace gutenberg.collect
                     break;
                 }
                 
-                scanFiles = scanDir.GetFiles(Scan.DONT_PROCESS);
+                scanFiles = scanDir.GetFiles(Scan.TO_SEND);    
             }
+            
             ((BackgroundWorker)o).ReportProgress(100, "TASK_END");
             fataphat.Disconnect();
             asleep = true;

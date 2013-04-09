@@ -27,11 +27,13 @@ namespace gutenberg.collect
             if (File.Exists(reportFile))
             {
                 FaTaPhat f = new FaTaPhat();
-                string remote = string.Format("scanbot-logs/{0}.{1}", hostname, DateTime.Now.Ticks);
+                string remote = string.Format("scanbot-logs/{0}.{1}", 
+                    hostname, DateTime.Now.Ticks);
                 try 
                 {
                     f.Connect();
-                    f.Put(reportFile, remote, System.Net.FtpClient.FtpDataType.ASCII);
+                    f.Put(reportFile, remote, 
+                        System.Net.FtpClient.FtpDataType.ASCII);
                     f.Disconnect();
                     File.Delete(reportFile);
                 } catch (Exception) {}

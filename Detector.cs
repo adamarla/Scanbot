@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Collections;
 using System.ComponentModel;
@@ -30,7 +31,7 @@ namespace gutenberg.collect
 			hints.Add(DecodeHintType.TRY_HARDER, Boolean.TrueString);
 
 			while (GotScan())
-			{
+			{			
 				int fileCount = 0;
 				string[] scanFiles = scanDir.GetFiles(Scan.TO_DETECT);
   			    progress = (int)(fileCount * 100.00 / scanFiles.Length);
@@ -47,7 +48,8 @@ namespace gutenberg.collect
 					progress = (int)(fileCount * 100.00 / scanFiles.Length);
 					((BackgroundWorker)o).ReportProgress(progress);
                     
-					try {
+					try 
+					{
 						QRCodeResult = DetectQRC(scanFile, hints);
 					}
 					catch (Exception)
@@ -83,40 +85,34 @@ namespace gutenberg.collect
 			LuminanceSource source = null;
 			BinaryBitmap bitmap = null;
 			Binarizer binarizer = null;
-			Reader reader = null;
 			Result QRCodeResult = null;
+			Reader reader = new QRCodeReader();
 
 			byte[] buffer = File.ReadAllBytes(file);
 			using (MemoryStream ms = new MemoryStream(buffer))
 			{
 				img = Image.FromStream(ms);
 			}
-				
+			
 			bool flipped = false;
 			while (true)
 			{
-				Bitmap bmp = new Bitmap(img);
-				int w = bmp.Width;
-				int third = (int)(w / 3.0);
-				Rectangle r = new Rectangle(new Point(2 * third, 0), 
-					new Size(third, bmp.Height));
-				bmp = bmp.Clone(r, bmp.PixelFormat);
-				
-				source = new RGBLuminanceSource(bmp, bmp.Width, bmp.Height);
-				ZXingConfig[] configs = ZXingConfig.getInstances(source);
-				foreach (ZXingConfig config in configs)
-				{					
-					reader = config.reader;
-					binarizer = config.binarizer;
-					bitmap = new BinaryBitmap(binarizer);
-					try {
-						QRCodeResult = reader.decode(bitmap, hints);
-                        QRCodeResult.ResultMetadata[FLIPPED_KEY] = flipped? 1: 0;                        
-						break;
-					} catch (Exception) { }                    
-				}				
-				if (QRCodeResult != null)
-					break;
+				Bitmap[] snippets = GetSnippets(img);			
+				foreach (Bitmap bmp in snippets)
+				{
+					source = new RGBLuminanceSource(bmp, bmp.Width, bmp.Height);
+					ZXingConfig[] configs = ZXingConfig.getInstances(source);
+					foreach (ZXingConfig config in configs)
+					{
+						binarizer = config.binarizer;
+						bitmap = new BinaryBitmap(binarizer);
+						try {
+							QRCodeResult = reader.decode(bitmap, hints);
+							QRCodeResult.ResultMetadata[FLIPPED_KEY] = flipped? 1: 0;                        
+							return QRCodeResult;//found it, get outta Dodge!
+						} catch (Exception) { }                    
+					}
+				}
 				
 				if (!flipped)
 				{
@@ -131,33 +127,37 @@ namespace gutenberg.collect
 		private bool GotScan()
 		{
 			progress = 0;
-            
-            string[] pdfs = scanDir.GetFiles(".pdf");
-            foreach (string pdf in pdfs)
-            {
-                    ExplodePDF(pdf);
-            }
-            
-			string[] scanFiles = Directory.GetFiles(scanDir.ToString());
+			string[] scanFiles = null;
 			string pickedUp = string.Empty, moved = string.Empty;
-			foreach (string file in scanFiles)
-			{
-				if (Directory.Exists(file)) continue;
+            bool keepLooping = true;
+            while(keepLooping)
+            {
+                keepLooping = false;
+                scanFiles = Directory.GetFiles(scanDir.ToString());
+                foreach (string file in scanFiles)
+                {
+                    if (Directory.Exists(file)) continue;
 
-				if (file.EndsWith(Scan.GRDNS_EXTNSN)) continue;
+                    if (file.EndsWith(Scan.GRDNS_EXTNSN)) continue;
 
-                if (file.EndsWith(ScanDirectory.INI_FILE)) continue;
-                
-                if (file.EndsWith(ScanDirectory.FLDR_ICON_FILE)) continue;
+                    if (file.EndsWith(ScanDirectory.INI_FILE)) continue;
+                    
+                    if (file.EndsWith(ScanDirectory.FLDR_ICON_FILE)) continue;
+                    
+                    if (IsTIFF(file)) 
+                        {ExplodeTIFF(file); keepLooping = true; continue;}
+                    
+                    if (IsPDF(file)) 
+                        {ExplodePDF(file); keepLooping = true; continue;}
 
-				pickedUp = Path.ChangeExtension(file, Scan.TO_DETECT);
-				File.Move(file, pickedUp);
-			}
-            
+                    pickedUp = Path.ChangeExtension(file, Scan.TO_DETECT);
+                    File.Move(file, pickedUp);
+                }
+            }            
 			return scanDir.GetFiles(Scan.TO_DETECT).Length != 0;
 		}
         
-        public void ExplodePDF(string PDF)
+        private void ExplodePDF(string PDF)
         {
             try {
                 PdfReader pdfReader = new PdfReader (PDF);
@@ -175,10 +175,99 @@ namespace gutenberg.collect
             catch (Exception) { }
             File.Delete(PDF);
         }
+        
+        private void ExplodeTIFF(string TIFF)
+        {
+            using (Image imageFile = Image.FromFile(TIFF)) 
+            { 
+                FrameDimension frameDimensions = new FrameDimension( 
+                    imageFile.FrameDimensionsList[0]); 
 
+                string path = Path.GetDirectoryName(TIFF);
+                // Gets the number of pages from the tiff image (if multipage) 
+                int frameNum = imageFile.GetFrameCount(frameDimensions);
+                for (int frame = 0; frame < frameNum; frame++) 
+                { 
+                    // Selects one frame at a time and save as jpeg. 
+                    imageFile.SelectActiveFrame(frameDimensions, frame); 
+                    using (Bitmap bmp = new Bitmap(imageFile)) 
+                    { 
+                        string file = Path.Combine(path, Path.GetRandomFileName());
+                        while (File.Exists(file))
+                        {
+                            file = Path.Combine(path, Path.GetRandomFileName());
+                        }
+                        bmp.Save(file, ImageFormat.Jpeg);
+                    } 
+                }
+            }
+            File.Delete(TIFF);
+        }
+        
+        private bool IsPDF(string file)
+        {
+            FileStream stream = new FileStream(file, FileMode.Open);
+            byte[] buffer = new byte[PDF_HDR_SIZE];
+            bool isPDF = false;
+            if (stream.Read(buffer, 0, buffer.Length) == buffer.Length)
+            {
+                string s = System.Text.Encoding.Default.GetString(buffer);
+                isPDF = s.Contains("%PDF-1.");
+            }
+            stream.Close();
+            return isPDF;
+        }
+        
+        private bool IsTIFF(string file)
+        {
+            FileStream stream = new FileStream(file, FileMode.Open);
+            byte[] buffer = new byte[TIF_HDR_SIZE];
+            bool isTIF = false;
+            if (stream.Read(buffer, 0, buffer.Length) == buffer.Length)
+            {
+                string s = BitConverter.ToString(buffer).
+                    Replace("-", string.Empty).ToUpper();
+                isTIF = s.Equals("49492A00") || s.Equals("4D4D002A");
+            }
+            stream.Close();
+            return isTIF;
+        }
+	
+	    private Bitmap[] GetSnippets(Image image)
+		{
+		    ArrayList snippets = new ArrayList();
+			
+			Bitmap bmp = new Bitmap(image);
+			int third = (int)(bmp.Width / 3.0);
+			Rectangle r = new Rectangle(new Point(2 * third, 0), 
+				new Size(third, bmp.Height));
+			bmp = bmp.Clone(r, bmp.PixelFormat);
+			snippets.Add(bmp);			
+			
+			int[] widths = {425, 566, 354, 283};
+			foreach (int width in widths) 
+			{
+                if (third < width) continue;
+				int height = (int)(((double)bmp.Height)/bmp.Width*width);
+				Bitmap newImage = new Bitmap(width, height);
+				using (Graphics gr = Graphics.FromImage(newImage))
+				{
+					gr.CompositingQuality = CompositingQuality.HighQuality;
+					gr.SmoothingMode = SmoothingMode.AntiAlias;
+					gr.InterpolationMode = InterpolationMode.HighQualityBicubic;
+					gr.PixelOffsetMode = PixelOffsetMode.HighQuality;
+					gr.DrawImage(bmp, new Rectangle(0, 0, width, height));
+				}
+				snippets.Add(newImage);
+		    }
+            return (Bitmap[])snippets.ToArray(bmp.GetType());	
+		}
+	
 		private int progress;
 		private ScanDirectory scanDir;
         private const string FLIPPED_KEY = "flipped";
+        
+        private const int TIF_HDR_SIZE = 4, PDF_HDR_SIZE = 1024;        
 	}
     
     public struct DetectionResult 
@@ -186,7 +275,7 @@ namespace gutenberg.collect
         public string Text;
         public int Rotation;    
     }
-
+	
     class PDFImageRenderListener : IRenderListener
     {
         protected string path;
@@ -221,31 +310,24 @@ namespace gutenberg.collect
         public void RenderText(TextRenderInfo renderInfo)
         {
         }
-
-    }
-    
+    }    
     
 	class ZXingConfig
 	{
-
 		public static ZXingConfig[] getInstances(LuminanceSource source)
 		{
 			ZXingConfig[] configs = new ZXingConfig[2];
 
 			configs[0] = new ZXingConfig();
 			configs[0].binarizer = new HybridBinarizer(source);
-			configs[0].reader = new QRCodeReader();
 
 			configs[1] = new ZXingConfig();
 			configs[1].binarizer = new GlobalHistogramBinarizer(source);
-			configs[1].reader = new QRCodeReader();
 
 			return configs;
 		}
 
 		public Binarizer binarizer;
-		public Reader    reader;
-
 	}
 
 }

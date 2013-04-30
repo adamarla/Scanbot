@@ -37,7 +37,18 @@ namespace gutenberg.collect
                     ((BackgroundWorker)o).ReportProgress(progress);
                  
                     scan = new Scan(scanFile);
-                    scan.Process(fataphat);
+                    if (scan.IsLocked())
+                        continue;
+                    try 
+                    {                    
+                        scan.Process(fataphat);
+                    }
+                    catch
+                    {
+                        fataphat.Dispose();
+                        fataphat = null;
+                        throw;
+                    }
                 }
                 
                 if (((BackgroundWorker)o).CancellationPending)

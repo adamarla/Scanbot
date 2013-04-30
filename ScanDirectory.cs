@@ -8,8 +8,6 @@ namespace gutenberg.collect
         public const string INI_FILE = @"desktop.ini";
         public const string FLDR_ICON_FILE = @"scanbot-folder-icon.ico";
         public const string SCAN_DIR = @"Scantray";
-		private const string LEFTOVERS_FILE = @"leftovers.grdns";
-		private const string KEY_FILES_FILE = @"keyfiles.grdns";
         
         public ScanDirectory()
         {
@@ -20,22 +18,6 @@ namespace gutenberg.collect
         public string[] GetFiles(string pattern)
         {
             return Directory.GetFiles(scanDirPath, "*" + pattern);
-        }
-        
-        public string Leftovers 
-        {
-            get
-            {
-                return Path.Combine(scanDirPath, LEFTOVERS_FILE);
-            }        
-        }
-        
-        public string Keyfiles
-        {
-            get
-            {
-                return Path.Combine(scanDirPath, KEY_FILES_FILE);
-            }        
         }
         
         public override string ToString()

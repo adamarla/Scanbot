@@ -10,7 +10,6 @@ namespace gutenberg.collect
 {
 	public class Scan
 	{
-		
 		public static string TO_DETECT = ".ap.grdns";
 		public static string TO_SEND = ".dp.grdns";
 		public static string GRDNS_EXTNSN = ".grdns";
@@ -22,20 +21,21 @@ namespace gutenberg.collect
         
         public void Process(DetectionResult result)
         {
+			string filename = Path.GetFileName(scanFile);			
             if (result.Text == null)
             {
                 string signature = SHA1(scanFile);
-                string undetectable = scanFile.Replace(Path.GetFileName(scanFile),
-                    string.Format("{0}_{1}_{2}{3}", 
-                        signature, 0, 0, Scan.TO_SEND));
+                string undetectable = scanFile.Replace(filename,
+                    string.Format(NAME_FORMAT, signature, UNDETECTED, 0, 
+					Scan.TO_SEND));
                 if (!File.Exists(undetectable))
                     File.Move(scanFile, undetectable);
             }
             else if (!result.Text.Equals(BLANK_PAGE_CODE))
             {
-                string dontProcess = scanFile.Replace(Path.GetFileName(scanFile),
-                    string.Format("{0}_{1}_{2}{3}", 
-                        result.Text, 1, result.Rotation, Scan.TO_SEND));
+                string dontProcess = scanFile.Replace(filename,
+                    string.Format(NAME_FORMAT, result.Text.Replace(" ", String.Empty), 
+					DETECTED, result.Rotation, Scan.TO_SEND));
                 if (!File.Exists(dontProcess))
                     File.Move(scanFile, dontProcess);
             }            
@@ -44,21 +44,48 @@ namespace gutenberg.collect
 		
 		public void Process(FaTaPhat fataphat)
 		{
+		    string filename = Path.GetFileName(scanFile);			
 			string nameInStaging = string.Format("staging/{0}", 
-                Path.GetFileNameWithoutExtension(scanFile));
-			Shrink(scanFile);
+                filename.Split(new char[] {'.'})[0]);
+			if (filename.Contains("_1_"))
+			    Shrink(scanFile);				
 			if (fataphat.Put(scanFile, nameInStaging, FtpDataType.Binary))
 			{
 				File.Delete(scanFile);
 			}
 		}
+        
+        public bool IsLocked()
+        {
+            FileInfo fileInfo = new FileInfo(scanFile);
+            FileStream stream = null;
+            try
+            {
+                stream = fileInfo.Open(FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                //the file is unavailable because it is:
+                //still being written to
+                //or being processed by another thread
+                //or does not exist (has already been processed)
+                return true;
+            }
+            finally
+            {
+                if (stream != null)
+                    stream.Close();
+            }
+            //file is not locked
+            return false;        
+        }        
 		
 		private void Shrink(string file)
 		{
             MemoryStream mstream = new MemoryStream(File.ReadAllBytes(file));
 			Bitmap image= new Bitmap(Image.FromStream(mstream));
 			image = Crop(image);
-			int WIDTH = 900;
+			int WIDTH = 1275;//width in pixels @150dpi
 			if (image.Width > WIDTH)
 			{
 				int w = WIDTH, h = (int)(((double)image.Height)/image.Width*WIDTH);
@@ -106,6 +133,8 @@ namespace gutenberg.collect
         }
         
 		private string scanFile;
+		private const int DETECTED = 1, UNDETECTED = 0;
+		private const string NAME_FORMAT = "{0}_{1}_{2}{3}";
 		private const string BLANK_PAGE_CODE = "0";		
 	}
 }

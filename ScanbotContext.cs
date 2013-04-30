@@ -251,9 +251,8 @@ namespace gutenberg.collect
         
         private void ScanbotIsInactive()
         {
-            tsmiHeader.Text = "Scanbot (offline)";
             tsmiTransmissionStatus.Text = 
-                String.Format(INACTIVE_STATUS_MSG, "connect");
+                String.Format(INACTIVE_STATUS_MSG, "Connect");
             notifyIcon.BalloonTipTitle = INACTIVE_MSG_TITLE;
             notifyIcon.BalloonTipText = INACTIVE_MSG;                
             notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
@@ -362,7 +361,7 @@ namespace gutenberg.collect
         private const string 
             ZERO_ZERO_ZERO = "00:00:00",
             WELCOME_MSG_TITLE = "Scanbot is active",
-            INACTIVE_MSG_TITLE = "Scanbot is Offline",
+            INACTIVE_MSG_TITLE = "Scanbot is offline",
             WELCOME_MSG = 
                 "Drop scanned worksheets into Scantray on " +
                 "your Desktop (click to view)",
